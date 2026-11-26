@@ -36,6 +36,7 @@
 //   c++ -O2 -std=c++14 -Isrc/core/openjph \
 //       tests/neon_compare.cpp build/src/core/libopenjph.a -o neon_compare
 //   ./neon_compare [iterations]
+//   ./neon_compare bench        (times each line kernel against its generic one)
 //
 // The library must be built with the NEON kernels (OJPH_DISABLE_NEON off).
 //***************************************************************************/
@@ -670,8 +671,93 @@ static void test_transform_kernels(int iterations)
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// timing of each line kernel against its generic one (neon_compare bench)
+//////////////////////////////////////////////////////////////////////////////
+#include <chrono>
+
+template <typename F>
+static double time_ns(F f, int reps)
+{
+  f();  // warm up
+  auto t0 = std::chrono::steady_clock::now();
+  for (int i = 0; i < reps; ++i) f();
+  auto t1 = std::chrono::steady_clock::now();
+  return std::chrono::duration<double, std::nano>(t1 - t0).count() / reps;
+}
+
+#define BENCH(name, gen_call, neon_call) do { \
+  double g = time_ns([&]() { gen_call; }, reps); \
+  double v = time_ns([&]() { neon_call; }, reps); \
+  printf("  %-28s width %4u  gen %8.1f ns  neon %8.1f ns  %5.2f x\n", \
+         name, width, g, v, g / v); } while (0)
+
+static void bench_kernels(ui32 width, int reps)
+{
+  const ui32 I32 = line_buf::LFT_32BIT | line_buf::LFT_INTEGER;
+  const ui32 F32 = line_buf::LFT_32BIT;
+  test_line a(width, I32), b(width, I32), c(width, I32), d(width, I32),
+            e(width, I32), f(width, I32);
+  test_line fa(width, F32), fb(width, F32), fc(width, F32), fd(width, F32),
+            fe(width, F32), ff(width, F32);
+  for (ui32 i = 0; i < width; ++i) {
+    a.i32()[i] = (si32)rnd_int(9); b.i32()[i] = (si32)rnd_int(9);
+    c.i32()[i] = (si32)rnd_int(9); d.i32()[i] = (si32)rnd_int(9);
+    fa.f32()[i] = rnd_float(0.5f); fb.f32()[i] = rnd_float(0.5f);
+    fc.f32()[i] = rnd_float(0.5f); fd.f32()[i] = rnd_float(0.5f);
+  }
+  std::vector<ui32> cb(width + 16);
+  ui32 mv[8] = {0};
+  param_atk rev, irv;
+  rev.init_rev53(); irv.init_irv97();
+  const lifting_step *rs = rev.get_step(0), *is = irv.get_step(0);
+
+  BENCH("rev_tx_to_cb32", gen_rev_tx_to_cb32(a.i32(), cb.data(), 12, 1.0f, width, mv),
+        neon_rev_tx_to_cb32(a.i32(), cb.data(), 12, 1.0f, width, mv));
+  BENCH("rev_tx_from_cb32", gen_rev_tx_from_cb32(cb.data(), b.i32(), 12, 1.0f, width),
+        neon_rev_tx_from_cb32(cb.data(), b.i32(), 12, 1.0f, width));
+  BENCH("irv_tx_to_cb32", gen_irv_tx_to_cb32(fa.f32(), cb.data(), 12, 1024.0f, width, mv),
+        neon_irv_tx_to_cb32(fa.f32(), cb.data(), 12, 1024.0f, width, mv));
+  BENCH("irv_tx_from_cb32", gen_irv_tx_from_cb32(cb.data(), fb.f32(), 12, 0.001f, width),
+        neon_irv_tx_from_cb32(cb.data(), fb.f32(), 12, 0.001f, width));
+  BENCH("rev_convert", gen_rev_convert(&a.lb, 0, &e.lb, 0, -128, width),
+        neon_rev_convert(&a.lb, 0, &e.lb, 0, -128, width));
+  BENCH("irv_convert_to_float", gen_irv_convert_to_float(&a.lb, 0, &fe.lb, 8, false, width),
+        neon_irv_convert_to_float(&a.lb, 0, &fe.lb, 8, false, width));
+  BENCH("irv_convert_to_integer", gen_irv_convert_to_integer(&fa.lb, &e.lb, 0, 8, false, width),
+        neon_irv_convert_to_integer(&fa.lb, &e.lb, 0, 8, false, width));
+  BENCH("rct_forward", gen_rct_forward(&a.lb, &b.lb, &c.lb, &d.lb, &e.lb, &f.lb, width),
+        neon_rct_forward(&a.lb, &b.lb, &c.lb, &d.lb, &e.lb, &f.lb, width));
+  BENCH("rct_backward", gen_rct_backward(&a.lb, &b.lb, &c.lb, &d.lb, &e.lb, &f.lb, width),
+        neon_rct_backward(&a.lb, &b.lb, &c.lb, &d.lb, &e.lb, &f.lb, width));
+  BENCH("ict_forward", gen_ict_forward(fa.f32(), fb.f32(), fc.f32(), fd.f32(), fe.f32(), ff.f32(), width),
+        neon_ict_forward(fa.f32(), fb.f32(), fc.f32(), fd.f32(), fe.f32(), ff.f32(), width));
+  BENCH("ict_backward", gen_ict_backward(fa.f32(), fb.f32(), fc.f32(), fd.f32(), fe.f32(), ff.f32(), width),
+        neon_ict_backward(fa.f32(), fb.f32(), fc.f32(), fd.f32(), fe.f32(), ff.f32(), width));
+  BENCH("rev_vert_step", gen_rev_vert_step(rs, &a.lb, &b.lb, &e.lb, width, false),
+        neon_rev_vert_step(rs, &a.lb, &b.lb, &e.lb, width, false));
+  BENCH("irv_vert_step", gen_irv_vert_step(is, &fa.lb, &fb.lb, &fe.lb, width, false),
+        neon_irv_vert_step(is, &fa.lb, &fb.lb, &fe.lb, width, false));
+  BENCH("irv_vert_times_K", gen_irv_vert_times_K(1.0f, &fe.lb, width),
+        neon_irv_vert_times_K(1.0f, &fe.lb, width));
+  BENCH("rev_horz_ana", gen_rev_horz_ana(&rev, &d.lb, &e.lb, &a.lb, width, true),
+        neon_rev_horz_ana(&rev, &d.lb, &e.lb, &a.lb, width, true));
+  BENCH("rev_horz_syn", gen_rev_horz_syn(&rev, &f.lb, &d.lb, &e.lb, width, true),
+        neon_rev_horz_syn(&rev, &f.lb, &d.lb, &e.lb, width, true));
+  BENCH("irv_horz_ana", gen_irv_horz_ana(&irv, &fd.lb, &fe.lb, &fa.lb, width, true),
+        neon_irv_horz_ana(&irv, &fd.lb, &fe.lb, &fa.lb, width, true));
+  BENCH("irv_horz_syn", gen_irv_horz_syn(&irv, &ff.lb, &fd.lb, &fe.lb, width, true),
+        neon_irv_horz_syn(&irv, &ff.lb, &fd.lb, &fe.lb, width, true));
+}
+
+//////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
 {
+  if (argc > 1 && strcmp(argv[1], "bench") == 0) {
+    static const ui32 widths[] = { 64, 240, 960, 1920 };
+    for (ui32 w : widths)
+      bench_kernels(w, (int)(4000000 / w));
+    return 0;
+  }
   int iterations = argc > 1 ? atoi(argv[1]) : 20000;
   test_block_encoder(iterations);
   test_block_decoder(iterations);
