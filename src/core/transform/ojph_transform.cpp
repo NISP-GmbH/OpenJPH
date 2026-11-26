@@ -168,6 +168,21 @@ namespace ojph {
     
     #elif defined(OJPH_ARCH_ARM)
 
+      #if defined(OJPH_ENABLE_NEON)
+        if (get_cpu_ext_level() >= ARM_CPU_EXT_LEVEL_ASIMD)
+        {
+          // NEON kernels; see ojph_simd_neon.h
+          rev_vert_step             = neon_rev_vert_step;
+          rev_horz_ana              = neon_rev_horz_ana;
+          rev_horz_syn              = neon_rev_horz_syn;
+
+          irv_vert_step             = neon_irv_vert_step;
+          irv_vert_times_K          = neon_irv_vert_times_K;
+          irv_horz_ana              = neon_irv_horz_ana;
+          irv_horz_syn              = neon_irv_horz_syn;
+        }
+      #endif // OJPH_ENABLE_NEON
+
     #elif defined(OJPH_ARCH_PPC64LE)
 
         if (get_cpu_ext_level() >= PPC_CPU_EXT_LEVEL_ARCH_2_07)

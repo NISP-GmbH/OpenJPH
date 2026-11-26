@@ -37,6 +37,10 @@
 //***************************************************************************/
 
 //***************************************************************************/
+// The NEON (AArch64) version of ojph_block_decoder_wasm.cpp: the same code on the
+// nv_* operations of ojph_simd_neon.h, which have the semantics of the
+// WebAssembly SIMD instructions of the same names.
+//***************************************************************************/
 /** @file ojph_block_decoder_neon.cpp
  *  @brief implements a faster HTJ2K block decoder using NEON; the
  *         WebAssembly SIMD decoder (ojph_block_decoder_wasm.cpp) on the

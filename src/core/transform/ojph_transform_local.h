@@ -316,6 +316,55 @@ namespace ojph {
     //////////////////////////////////////////////////////////////////////////
     //
     //
+    //                          NEON Functions
+    //
+    //
+    //////////////////////////////////////////////////////////////////////////
+
+    //////////////////////////////////////////////////////////////////////////
+    // Irreversible functions
+    //////////////////////////////////////////////////////////////////////////
+
+    /////////////////////////////////////////////////////////////////////////
+    void neon_irv_vert_step(const lifting_step* s, const line_buf* sig,
+                            const line_buf* other, const line_buf* aug,
+                            ui32 repeat, bool synthesis);
+
+    /////////////////////////////////////////////////////////////////////////
+    void neon_irv_vert_times_K(float K, const line_buf* aug, ui32 repeat);
+
+    /////////////////////////////////////////////////////////////////////////
+    void neon_irv_horz_ana(const param_atk* atk, const line_buf* ldst,
+                           const line_buf* hdst, const line_buf* src,
+                           ui32 width, bool even);
+
+    /////////////////////////////////////////////////////////////////////////
+    void neon_irv_horz_syn(const param_atk *atk, const line_buf* dst,
+                           const line_buf *lsrc, const line_buf *hsrc,
+                           ui32 width, bool even);
+
+    //////////////////////////////////////////////////////////////////////////
+    // Reversible functions
+    //////////////////////////////////////////////////////////////////////////
+
+    /////////////////////////////////////////////////////////////////////////
+    void neon_rev_vert_step(const lifting_step* s, const line_buf* sig,
+                            const line_buf* other, const line_buf* aug,
+                            ui32 repeat, bool synthesis);
+
+    /////////////////////////////////////////////////////////////////////////
+    void neon_rev_horz_ana(const param_atk* atk, const line_buf* ldst,
+                           const line_buf* hdst, const line_buf* src,
+                           ui32 width, bool even);
+
+    /////////////////////////////////////////////////////////////////////////
+    void neon_rev_horz_syn(const param_atk* atk, const line_buf* dst,
+                           const line_buf* lsrc, const line_buf* hsrc,
+                           ui32 width, bool even);
+
+    //////////////////////////////////////////////////////////////////////////
+    //
+    //
     //                           VSX Functions
     //
     //

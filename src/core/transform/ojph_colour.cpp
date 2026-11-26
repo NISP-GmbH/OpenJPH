@@ -209,6 +209,25 @@ namespace ojph {
 
     #elif defined(OJPH_ARCH_ARM)
 
+      #if defined(OJPH_ENABLE_NEON)
+        if (get_cpu_ext_level() >= ARM_CPU_EXT_LEVEL_ASIMD)
+        {
+          // NEON kernels; see ojph_simd_neon.h
+          rev_convert = neon_rev_convert;
+          rev_convert_nlt_type3 = neon_rev_convert_nlt_type3;
+          irv_convert_to_integer = neon_irv_convert_to_integer;
+          irv_convert_to_float = neon_irv_convert_to_float;
+          irv_convert_to_integer_nlt_type3 =
+            neon_irv_convert_to_integer_nlt_type3;
+          irv_convert_to_float_nlt_type3 =
+            neon_irv_convert_to_float_nlt_type3;
+          rct_forward = neon_rct_forward;
+          rct_backward = neon_rct_backward;
+          ict_forward = neon_ict_forward;
+          ict_backward = neon_ict_backward;
+        }
+      #endif // OJPH_ENABLE_NEON
+
     #elif defined(OJPH_ARCH_PPC64LE)
 
         if (get_cpu_ext_level() >= PPC_CPU_EXT_LEVEL_ARCH_2_07)

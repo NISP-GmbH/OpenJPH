@@ -61,6 +61,7 @@ namespace ojph {
     void sse_mem_clear(void* addr, size_t count);
     void avx_mem_clear(void* addr, size_t count);
     void wasm_mem_clear(void* addr, size_t count);
+    void neon_mem_clear(void* addr, size_t count);
     void vsx_mem_clear(void* addr, size_t count);
 
     //////////////////////////////////////////////////////////////////////////
@@ -68,11 +69,13 @@ namespace ojph {
     ui32 sse2_find_max_val32(ui32* address);
     ui32 avx2_find_max_val32(ui32* address);
     ui32 wasm_find_max_val32(ui32* address);
+    ui32 neon_find_max_val32(ui32* address);
     ui32 vsx_find_max_val32(ui32* address);
     ui64  gen_find_max_val64(ui64* address);
     ui64 sse2_find_max_val64(ui64* address);
     ui64 avx2_find_max_val64(ui64* address);
     ui64 wasm_find_max_val64(ui64* address);
+    ui64 neon_find_max_val64(ui64* address);
     ui64 vsx_find_max_val64(ui64* address);
 
 
@@ -91,9 +94,13 @@ namespace ojph {
                              float delta_inv, ui32 count, ui32* max_val);
     void wasm_rev_tx_to_cb32(const void *sp, ui32 *dp, ui32 K_max,
                              float delta_inv, ui32 count, ui32* max_val);
+    void neon_rev_tx_to_cb32(const void *sp, ui32 *dp, ui32 K_max,
+                             float delta_inv, ui32 count, ui32* max_val);
     void vsx_rev_tx_to_cb32(const void *sp, ui32 *dp, ui32 K_max,
                             float delta_inv, ui32 count, ui32* max_val);
     void wasm_irv_tx_to_cb32(const void *sp, ui32 *dp, ui32 K_max,
+                             float delta_inv, ui32 count, ui32* max_val);
+    void neon_irv_tx_to_cb32(const void *sp, ui32 *dp, ui32 K_max,
                              float delta_inv, ui32 count, ui32* max_val);
     void vsx_irv_tx_to_cb32(const void *sp, ui32 *dp, ui32 K_max,
                             float delta_inv, ui32 count, ui32* max_val);
@@ -105,6 +112,8 @@ namespace ojph {
     void avx2_rev_tx_to_cb64(const void *sp, ui64 *dp, ui32 K_max,
                              float delta_inv, ui32 count, ui64* max_val);
     void wasm_rev_tx_to_cb64(const void *sp, ui64 *dp, ui32 K_max,
+                             float delta_inv, ui32 count, ui64* max_val);
+    void neon_rev_tx_to_cb64(const void *sp, ui64 *dp, ui32 K_max,
                              float delta_inv, ui32 count, ui64* max_val);
     void vsx_rev_tx_to_cb64(const void *sp, ui64 *dp, ui32 K_max,
                             float delta_inv, ui32 count, ui64* max_val);
@@ -124,9 +133,13 @@ namespace ojph {
                                float delta, ui32 count);
     void wasm_rev_tx_from_cb32(const ui32 *sp, void *dp, ui32 K_max,
                                float delta, ui32 count);
+    void neon_rev_tx_from_cb32(const ui32 *sp, void *dp, ui32 K_max,
+                               float delta, ui32 count);
     void vsx_rev_tx_from_cb32(const ui32 *sp, void *dp, ui32 K_max,
                               float delta, ui32 count);
     void wasm_irv_tx_from_cb32(const ui32 *sp, void *dp, ui32 K_max,
+                               float delta, ui32 count);
+    void neon_irv_tx_from_cb32(const ui32 *sp, void *dp, ui32 K_max,
                                float delta, ui32 count);
     void vsx_irv_tx_from_cb32(const ui32 *sp, void *dp, ui32 K_max,
                               float delta, ui32 count);
@@ -140,6 +153,8 @@ namespace ojph {
     void gen_irv_tx_from_cb64(const ui64 *sp, void *dp, ui32 K_max,
                               float delta, ui32 count);
     void wasm_rev_tx_from_cb64(const ui64 *sp, void *dp, ui32 K_max,
+                               float delta, ui32 count);
+    void neon_rev_tx_from_cb64(const ui64 *sp, void *dp, ui32 K_max,
                                float delta, ui32 count);
     void vsx_rev_tx_from_cb64(const ui64 *sp, void *dp, ui32 K_max,
                               float delta, ui32 count);
@@ -265,9 +280,29 @@ namespace ojph {
         // NEON kernels; NEON is always present on AArch64
         if (get_cpu_ext_level() >= ARM_CPU_EXT_LEVEL_ASIMD) {
           decode_cb32 = ojph_decode_codeblock_neon;
+          find_max_val32 = neon_find_max_val32;
+          mem_clear = neon_mem_clear;
+          if (reversible) {
+            tx_to_cb32 = neon_rev_tx_to_cb32;
+            tx_from_cb32 = neon_rev_tx_from_cb32;
+          }
+          else {
+            tx_to_cb32 = neon_irv_tx_to_cb32;
+            tx_from_cb32 = neon_irv_tx_from_cb32;
+          }
           encode_cb32 = ojph_encode_codeblock_neon;
           bool result = initialize_block_encoder_tables_neon();
           assert(result); ojph_unused(result);
+
+          find_max_val64 = neon_find_max_val64;
+          if (reversible) {
+            tx_to_cb64 = neon_rev_tx_to_cb64;
+            tx_from_cb64 = neon_rev_tx_from_cb64;
+          }
+          else {
+            tx_to_cb64 = NULL;
+            tx_from_cb64 = gen_irv_tx_from_cb64;
+          }
         }
       #endif // OJPH_ENABLE_NEON
 
