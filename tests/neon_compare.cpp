@@ -60,6 +60,12 @@ namespace ojph {
       ojph::mem_elastic_allocator *elastic, ojph::coded_lists *& coded);
     bool initialize_block_encoder_tables();
     bool initialize_block_encoder_tables_neon();
+    bool ojph_decode_codeblock32(ui8* coded_data, ui32* decoded_data,
+      ui32 missing_msbs, ui32 num_passes, ui32 lengths1, ui32 lengths2,
+      ui32 width, ui32 height, ui32 stride, bool stripe_causal);
+    bool ojph_decode_codeblock_neon(ui8* coded_data, ui32* decoded_data,
+      ui32 missing_msbs, ui32 num_passes, ui32 lengths1, ui32 lengths2,
+      ui32 width, ui32 height, ui32 stride, bool stripe_causal);
   }
 }
 
@@ -160,10 +166,96 @@ static void test_block_encoder(int iterations)
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// encodes random code blocks with the generic encoder and decodes them with
+// both decoders; for 2 and 3 passes, random bytes follow as the SigProp and
+// MagRef segments (the decoders read them as any other bits)
+static void test_block_decoder(int iterations)
+{
+  initialize_block_encoder_tables();
+  mem_elastic_allocator el(1 << 20);
+  static const ui32 shapes[][2] = { {64, 64}, {128, 32}, {32, 32}, {64, 32},
+    {32, 64}, {256, 16}, {1024, 4}, {16, 256}, {4, 1024}, {8, 8}, {4, 4} };
+  long blocks = 0, multi = 0, samples = 0;
+  for (int it = 0; it < iterations; ++it)
+  {
+    int s = (int)rnd(sizeof(shapes) / sizeof(shapes[0]));
+    ui32 width = shapes[s][0], height = shapes[s][1];
+    if (rnd(2)) { width = 1 + rnd(width); height = 1 + rnd(height); }
+    ui32 stride = ((width + 7) & ~7u) + 8 * rnd(3);
+    ui32 K_max = 1 + rnd(29);
+    std::vector<ui32> buf(stride * height + 64);
+    fill_codeblock(buf, width, height, stride, K_max);
+
+    ui32 len[2] = {0, 0};
+    coded_lists *c = NULL;
+    el.restart();
+    ojph_encode_codeblock32(buf.data(), K_max - 1, 1, width, height, stride,
+                            len, &el, c);
+
+    ui32 num_passes = 1, len2 = 0;
+    if (K_max >= 3 && rnd(3) == 0) {  // add SigProp (and MagRef) bytes
+      num_passes = 2 + rnd(2);
+      len2 = 1 + rnd(2 * width * height / 8 + 8);
+    }
+    const ui32 pre = 64, post = 64;
+    std::vector<ui8> coded(pre + len[0] + len2 + post);
+    for (size_t i = 0; i < coded.size(); ++i)
+      coded[i] = (ui8)rng();
+    memcpy(coded.data() + pre, c->buf, len[0]);
+    for (ui32 i = 0; i < len2; ++i) {   // no 0xFF followed by > 0x8F
+      ui8 b = (ui8)rng();
+      if (i > 0 && coded[pre + len[0] + i - 1] == 0xFF) b &= 0x7F;
+      coded[pre + len[0] + i] = b;
+    }
+    std::vector<ui8> coded2 = coded;
+
+    ui32 out_h = height + 4, out_stride = stride + 16;
+    std::vector<ui32> out_a(out_stride * out_h, 0x5A5A5A5Au);
+    std::vector<ui32> out_b(out_stride * out_h, 0x5A5A5A5Au);
+    bool stripe_causal = rnd(4) == 0;
+    bool ra = ojph_decode_codeblock32(coded.data() + pre, out_a.data(),
+      K_max - 1, num_passes, len[0], len2, width, height, out_stride,
+      stripe_causal);
+    bool rb = ojph_decode_codeblock_neon(coded2.data() + pre, out_b.data(),
+      K_max - 1, num_passes, len[0], len2, width, height, out_stride,
+      stripe_causal);
+    CHECK(ra == rb, "decoder result %d vs %d (%ux%u K_max %u passes %u)",
+          (int)ra, (int)rb, width, height, K_max, num_passes);
+    if (num_passes == 1)
+      CHECK(ra, "decoder failed on a valid block (%ux%u K_max %u)",
+            width, height, K_max);
+    if (ra && rb) {
+      // compare the decoded block (what the codestream uses)
+      bool same = true;
+      for (ui32 y = 0; y < height && same; ++y)
+        same = memcmp(out_a.data() + y * out_stride,
+                      out_b.data() + y * out_stride, width * 4) == 0;
+      CHECK(same, "decoded samples differ (%ux%u K_max %u passes %u sc %d)",
+            width, height, K_max, num_passes, (int)stripe_causal);
+      if (num_passes == 1 && same) {  // the samples coded: magnitudes back
+        ui32 shift = 31 - K_max;
+        for (ui32 y = 0; y < height && same; ++y)
+          for (ui32 x = 0; x < width && same; ++x) {
+            ui32 v = buf[y * stride + x], d = out_a[y * out_stride + x];
+            ui32 mv = (v & 0x7FFFFFFFu) >> shift, md = (d & 0x7FFFFFFFu) >> shift;
+            same = mv == md && (mv == 0 || (v >> 31) == (d >> 31));
+          }
+        CHECK(same, "decoded samples are not the coded ones (%ux%u K_max %u)",
+              width, height, K_max);
+      }
+    }
+    ++blocks; multi += num_passes > 1; samples += width * height;
+  }
+  printf("block decoder: %ld blocks (%ld with SigProp/MagRef), %ld samples\n",
+         blocks, multi, samples);
+}
+
+//////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
 {
   int iterations = argc > 1 ? atoi(argv[1]) : 20000;
   test_block_encoder(iterations);
+  test_block_decoder(iterations);
   printf("%s: %d failures\n", failures ? "FAILED" : "PASSED", failures);
   return failures ? 1 : 0;
 }

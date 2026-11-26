@@ -44,8 +44,7 @@
 // generic encoder's (ojph_block_encoder.cpp).
 
 #include "ojph_arch.h"
-#if defined(OJPH_ARCH_ARM) && \
-  (defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC))
+#if defined(OJPH_ENABLE_NEON)
 
 #include <cassert>
 #include <cstring>
@@ -1332,4 +1331,4 @@ namespace ojph {
   } /* namespace local */
 } /* namespace ojph */
 
-#endif // OJPH_ARCH_ARM && AArch64
+#endif // OJPH_ENABLE_NEON

@@ -261,15 +261,15 @@ namespace ojph {
 
     #elif defined(OJPH_ARCH_ARM)
 
-      #if !defined(OJPH_DISABLE_NEON) && \
-        (defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC))
+      #if defined(OJPH_ENABLE_NEON)
         // NEON kernels; NEON is always present on AArch64
         if (get_cpu_ext_level() >= ARM_CPU_EXT_LEVEL_ASIMD) {
+          decode_cb32 = ojph_decode_codeblock_neon;
           encode_cb32 = ojph_encode_codeblock_neon;
           bool result = initialize_block_encoder_tables_neon();
           assert(result); ojph_unused(result);
         }
-      #endif // !OJPH_DISABLE_NEON && AArch64
+      #endif // OJPH_ENABLE_NEON
 
     #elif defined(OJPH_ARCH_PPC64LE)
 
