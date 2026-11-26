@@ -261,6 +261,16 @@ namespace ojph {
 
     #elif defined(OJPH_ARCH_ARM)
 
+      #if defined(OJPH_ENABLE_NEON)
+        // NEON kernels; NEON is always present on AArch64
+        if (get_cpu_ext_level() >= ARM_CPU_EXT_LEVEL_ASIMD) {
+          decode_cb32 = ojph_decode_codeblock_neon;
+          encode_cb32 = ojph_encode_codeblock_neon;
+          bool result = initialize_block_encoder_tables_neon();
+          assert(result); ojph_unused(result);
+        }
+      #endif // OJPH_ENABLE_NEON
+
     #elif defined(OJPH_ARCH_PPC64LE)
 
       // 128-bit VSX kernels; see ojph_simd_vsx.h.
