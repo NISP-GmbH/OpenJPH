@@ -119,13 +119,15 @@ namespace ojph {
 #endif // !OJPH_ARCH_UNKNOWN
 
   ////////////////////////////////////////////////////////////////////////////
-  //  NEON kernels (*_neon.cpp): AArch64, with GCC or Clang (they use
-  //  their vector extensions); NEON is always present on AArch64
+  //  NEON kernels (*_neon.cpp): AArch64 with Clang (they use its vector
+  //  extensions); NEON is always present on AArch64. GCC is left on the
+  //  generic C until a GCC build has been tried (define OJPH_ENABLE_NEON
+  //  to try it)
   ////////////////////////////////////////////////////////////////////////////
 #if defined(OJPH_ARCH_ARM) && !defined(OJPH_DISABLE_SIMD) &&  \
     !defined(OJPH_DISABLE_NEON) && !defined(OJPH_EMSCRIPTEN) &&  \
     (defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC)) &&  \
-    (defined(__GNUC__) || defined(__clang__))
+    defined(__clang__) && !defined(OJPH_ENABLE_NEON)
 #define OJPH_ENABLE_NEON
 #endif
 
